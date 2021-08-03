@@ -3,6 +3,7 @@ from getpass import getpass
 from argparse import ArgumentParser
 
 import slixmpp
+from slixmpp.exceptions import IqError, IqTimeout ### Librerias de sleekxmpp para poder manejar excepciones
 
 class Register(slixmpp.ClientXMPP):
     def __init__(self, jid, password):
@@ -23,7 +24,7 @@ class Register(slixmpp.ClientXMPP):
         iq['register']['password'] = self.password
 
         try:
-            iq.send(now=True)
+            iq.send()
             print("New account created", self.boundjid,"\n")
         except IqError as e:
             print("Error on registration ", e,"\n")
@@ -31,6 +32,9 @@ class Register(slixmpp.ClientXMPP):
         except IqTimeout:
             print("Server is not answering\n")
             self.disconnect()
+        except Exception as e:
+            print(e)
+            self.disconnect()    
 
 class SendMsg(slixmpp.ClientXMPP):
     def __init__(self, jid, password, recipient, message):
@@ -72,10 +76,8 @@ if __name__ == '__main__':
                         help="JID to use")
     parser.add_argument("-p", "--password", dest="password",
                         help="password to use")
-    parser.add_argument("-t", "--to", dest="to",
-                        help="JID to send the message to")
-    parser.add_argument("-m", "--message", dest="message",
-                        help="message to send")
+    parser.add_argument("-r", "--register", dest="register",
+                        help="Is new user")
 
     args = parser.parse_args()
 
@@ -87,6 +89,17 @@ if __name__ == '__main__':
         args.jid = input("Username: ")
     if args.password is None:
         args.password = getpass("Password: ")
+
+    if (args.register) is not None:
+            xmpp = Register(args.jid, args.password)
+            xmpp.register_plugin('xep_0030') ### Service Discovery
+            xmpp.register_plugin('xep_0004') ### Data Forms
+            xmpp.register_plugin('xep_0066') ### Band Data
+            xmpp.register_plugin('xep_0077') ### Band Registration
+
+            xmpp.connect()
+            xmpp.process(forever=False)
+            print("Registration Done\n")
 
     control = True
     while control:
