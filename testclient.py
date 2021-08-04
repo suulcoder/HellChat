@@ -1,7 +1,7 @@
 import logging
 import threading
 import slixmpp
-
+import base64, time
 from slixmpp.exceptions import IqError, IqTimeout
 from slixmpp.xmlstream.stanzabase import ET, ElementBase 
 from getpass import getpass
@@ -81,6 +81,53 @@ class Client(slixmpp.ClientXMPP):
             message = input("Write the message: ")
             self.send_message(mto=self.recipient,
                               mbody=message)
+
+class Client_file(slixmpp.ClientXMPP):
+    def __init__(self, jid, password, recipient, file):
+        slixmpp.ClientXMPP.__init__(self, jid, password)
+
+        self.recipient = recipient
+        self.user = user
+        self.file = file
+        self.add_event_handler("session_start", self.start)
+
+    async def start(self, event):
+        self.send_presence()
+        await self.get_roster()
+        with open(self.file, "rb") as file:
+            message = base64.b64encode(file.read()).decode('utf-8')
+            try:
+                self.notification_(self.user, '...', 'composing')
+                time.sleep(2)
+                self.send_message(mto=self.user,mbody=message,mtype="chat")
+            except IqError as e:
+                print("Something went wrong", e)
+            except IqTimeout:
+                print("THE SERVER IS NOT WITH YOU")
+        self.disconnect()
+
+    def notification_(self, to, body, my_type):
+
+        message = self.Message()
+        message['to'] = to
+        message['type'] = 'chat'
+        message['body'] = body
+
+        if (my_type == 'active'):
+            fragmentStanza = ET.fromstring("<active xmlns='http://jabber.org/protocol/chatstates'/>")
+        elif (my_type == 'composing'):
+            fragmentStanza = ET.fromstring("<composing xmlns='http://jabber.org/protocol/chatstates'/>")
+        elif (my_type == 'inactive'):
+            fragmentStanza = ET.fromstring("<inactive xmlns='http://jabber.org/protocol/chatstates'/>")
+        message.append(fragmentStanza)
+
+        try:
+            message.send()
+        except IqError as e:
+            print("Somethiing went wrong\n", e)
+        except IqTimeout:
+            print("THE SERVER IS NOT WITH YOU")
+
 
 class Client_exist(slixmpp.ClientXMPP):
     def __init__(self, jid, password):
@@ -197,6 +244,25 @@ class Client_subscribe(slixmpp.ClientXMPP):
         self.disconnect()
         print('\n\n')
 
+class Client_join_group(slixmpp.ClientXMPP):
+    def __init__(self, jid, password, room_jid, room_ak):
+        slixmpp.ClientXMPP.__init__(self, jid, password)
+        self.add_event_handler("session_start", self.start)
+        self.room = room_jid
+        self.ak = room_ak
+
+    async def start(self, event):
+        self.send_presence()
+        await self.get_roster()
+        try:
+            self.plugin['xep_0045'].joinMUC(self.room, self.ak)
+            print("YOU ARE ON THE GROUP NOW", e)
+        except IqError as e:
+            print("Something went wrong", e)
+        except IqTimeout:
+            print("THE SERVER IS NOT WITH YOU")
+        self.disconnect()
+
 if __name__ == '__main__':
     parser = ArgumentParser(description=Client.__doc__)
 
@@ -249,11 +315,12 @@ does not show that you are already logged in
 2.  Add user to cantacts                            !
 3.  Show details of a contact                       !
 4.  Comunication 1 to 1                             !
-5.  Group comunication
-6.  Define presence message                         !
-7.  Send/receive notifications
-8.  Send/receive files
-9.  Delete account                                  ?
+5.  Join Group 
+6.  Group comunication
+7.  Define presence message                         !
+8.  Send/receive notifications                      ?
+9.  Send/receive files                              ?
+10. Delete account                                  ?
 0.  Logout                                          !
 -----------------------------------------------------
             """)
@@ -301,7 +368,20 @@ does not show that you are already logged in
             except KeyboardInterrupt as e:
                 print('\nNice chat, dont forget I read all of it haha\n')
                 xmpp.disconnect()
-        if(user=="6"):
+        if(user=="5"):
+            room = input("Write the room JID: ") 
+            AK = input("Write the room name: ")
+            if '@conference.alumchat.xyz':
+                xmpp = Client_join_group(args.jid, args.password, room, AK)
+                xmpp.register_plugin('xep_0030') # Service Discovery
+                xmpp.register_plugin('xep_0199') # XMPP Ping
+                xmpp.register_plugin('xep_0045') # Mulit-User Chat (MUC)
+                xmpp.register_plugin('xep_0096') # Jabber Search
+                xmpp.connect()
+                xmpp.process(forever=False)
+
+
+        if(user=="7"):
             message = input("Write the presence message : ") 
             xmpp = Client_test(args.jid, args.password, show=False, message=message)
             xmpp.register_plugin('xep_0030') # Service Discovery
@@ -311,6 +391,16 @@ does not show that you are already logged in
             xmpp.connect()
             xmpp.process(forever=False)
         if(user=="9"):
+            recipient = input("Write the recipient JID: ") 
+            file = input("Write the file path : ") 
+            xmpp = Client_file(args.jid, args.password, recipient, file)
+            xmpp.register_plugin('xep_0030') # Service Discovery
+            xmpp.register_plugin('xep_0199') # XMPP Ping
+            xmpp.register_plugin('xep_0045') # Mulit-User Chat (MUC)
+            xmpp.register_plugin('xep_0096') # Jabber Search
+            xmpp.connect()
+            xmpp.process(forever=False)
+        if(user=="10"):
             xmpp = Register(args.jid, args.password)
             xmpp.delete_account()
             xmpp = None
