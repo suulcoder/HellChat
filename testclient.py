@@ -40,7 +40,16 @@ class Register(slixmpp.ClientXMPP):
             print(e)
             self.disconnect()  
 
-    def delete_account(self):
+class Delete(slixmpp.ClientXMPP):
+    def __init__(self, jid, password):
+        slixmpp.ClientXMPP.__init__(self, jid, password)
+
+        self.user = jid
+        self.add_event_handler("session_start", self.start)
+
+    def start(self, event):
+        self.send_presence()
+        self.get_roster()
         delete = self.Iq()
         delete['type'] = 'set'
         delete['from'] = self.user
@@ -48,7 +57,7 @@ class Register(slixmpp.ClientXMPP):
         delete.append(fragment)
 
         try:
-            delete.send()
+            delete.send(now=True)
             print("Account deleted")
         except IqError as e:
             print("Error on deletition", e)
@@ -56,6 +65,7 @@ class Register(slixmpp.ClientXMPP):
             print("THE SERVER IS NOT WITH YOU")
         except Exception as e:
             print(e)  
+        self.disconnect()
 
 class Client(slixmpp.ClientXMPP):
     def __init__(self, jid, password, recipient, message):
@@ -74,6 +84,7 @@ class Client(slixmpp.ClientXMPP):
                           mtype='chat')
 
     def message(self, msg):
+        print(msg)
         if msg['type'] in ('chat'):
             recipient = msg['to']
             body = msg['body']
@@ -81,52 +92,6 @@ class Client(slixmpp.ClientXMPP):
             message = input("Write the message: ")
             self.send_message(mto=self.recipient,
                               mbody=message)
-
-class Client_file(slixmpp.ClientXMPP):
-    def __init__(self, jid, password, recipient, file):
-        slixmpp.ClientXMPP.__init__(self, jid, password)
-
-        self.recipient = recipient
-        self.user = user
-        self.file = file
-        self.add_event_handler("session_start", self.start)
-
-    async def start(self, event):
-        self.send_presence()
-        await self.get_roster()
-        with open(self.file, "rb") as file:
-            message = base64.b64encode(file.read()).decode('utf-8')
-            try:
-                self.notification_(self.user, '...', 'composing')
-                time.sleep(2)
-                self.send_message(mto=self.user,mbody=message,mtype="chat")
-            except IqError as e:
-                print("Something went wrong", e)
-            except IqTimeout:
-                print("THE SERVER IS NOT WITH YOU")
-        self.disconnect()
-
-    def notification_(self, to, body, my_type):
-
-        message = self.Message()
-        message['to'] = to
-        message['type'] = 'chat'
-        message['body'] = body
-
-        if (my_type == 'active'):
-            fragmentStanza = ET.fromstring("<active xmlns='http://jabber.org/protocol/chatstates'/>")
-        elif (my_type == 'composing'):
-            fragmentStanza = ET.fromstring("<composing xmlns='http://jabber.org/protocol/chatstates'/>")
-        elif (my_type == 'inactive'):
-            fragmentStanza = ET.fromstring("<inactive xmlns='http://jabber.org/protocol/chatstates'/>")
-        message.append(fragmentStanza)
-
-        try:
-            message.send()
-        except IqError as e:
-            print("Somethiing went wrong\n", e)
-        except IqTimeout:
-            print("THE SERVER IS NOT WITH YOU")
 
 
 class Client_exist(slixmpp.ClientXMPP):
@@ -228,6 +193,50 @@ class Client_test(slixmpp.ClientXMPP):
         except IqTimeout:
             print("THE SERVER IS NOT WITH YOU")
 
+class Client_notification(slixmpp.ClientXMPP):
+    def __init__(self, jid, password, user, message, type_):
+        slixmpp.ClientXMPP.__init__(self, jid, password)
+        self.add_event_handler("session_start", self.start)
+        self.add_event_handler("message", self.message)
+        self.message = message
+        self.user = user
+        self.type_ = type_
+
+    async def start(self, event):
+        self.send_presence()
+        await self.get_roster()
+        self.notification_(self.user, self.message, 'active')
+
+    def notification_(self, to, body, my_type):
+        message = self.Message()
+        message['to'] = to
+        message['type'] = self.type_
+        message['body'] = body
+
+        if (my_type == 'active'):
+            fragmentStanza = ET.fromstring("<active xmlns='http://jabber.org/protocol/chatstates'/>")
+        elif (my_type == 'composing'):
+            fragmentStanza = ET.fromstring("<composing xmlns='http://jabber.org/protocol/chatstates'/>")
+        elif (my_type == 'inactive'):
+            fragmentStanza = ET.fromstring("<inactive xmlns='http://jabber.org/protocol/chatstates'/>")
+        message.append(fragmentStanza)
+
+        try:
+            message.send()
+        except IqError as e:
+            print("Somethiing went wrong\n", e)
+        except IqTimeout:
+            print("THE SERVER IS NOT WITH YOU")
+
+
+    def message(self, msg):
+        recipient = msg['to']
+        body = msg['body']
+        print(str(recipient) +  ": " + str(body))
+        #message = input("Write the message: ")
+        #self.send_message(mto=self.recipient,
+        #                  mbody=message)
+
 class Client_subscribe(slixmpp.ClientXMPP):
     def __init__(self, jid, password, to):
         slixmpp.ClientXMPP.__init__(self, jid, password)
@@ -255,13 +264,79 @@ class Client_join_group(slixmpp.ClientXMPP):
         self.send_presence()
         await self.get_roster()
         try:
-            self.plugin['xep_0045'].joinMUC(self.room, self.ak)
-            print("YOU ARE ON THE GROUP NOW", e)
+            self.plugin['xep_0045'].join_muc(self.room, self.ak)
+            print("YOU ARE ON THE GROUP NOW")
         except IqError as e:
             print("Something went wrong", e)
         except IqTimeout:
             print("THE SERVER IS NOT WITH YOU")
         self.disconnect()
+
+class MUCBot(slixmpp.ClientXMPP):
+    def __init__(self, jid, password, room, nick):
+        slixmpp.ClientXMPP.__init__(self, jid, password)
+
+        self.jid = jid
+        self.room = room
+        self.nick = nick
+        self.add_event_handler("session_start", self.start)
+        self.add_event_handler("groupchat_message", self.muc_message)
+        self.add_event_handler("muc::%s::got_online" % self.room,
+                               self.muc_online)
+
+    async def start(self, event):
+        await self.get_roster()
+        self.send_presence()
+        self.plugin['xep_0045'].join_muc(self.room,
+                                         self.nick,
+                                         # password=the_room_password,
+                                         )
+        message = input("Write the message: ")
+        self.send_message(mto=self.room,
+                          mbody=message,
+                          mtype='groupchat')
+
+    def muc_message(self, msg):
+        if(str(msg['from']).split('/')[1]!=self.nick):
+            print(str(msg['from']).split('/')[1] + ": " + msg['body'])
+            message = input("Write the message: ")
+            self.send_message(mto=msg['from'].bare,
+                              mbody=message,
+                              mtype='groupchat')
+
+    def muc_online(self, presence):
+        if presence['muc']['nick'] != self.nick:
+            self.send_message(mto=presence['from'].bare,
+                              mbody="Hello, %s %s" % (presence['muc']['role'],
+                                                      presence['muc']['nick']),
+                              mtype='groupchat')
+
+class Client_file(slixmpp.ClientXMPP):
+    def __init__(self, jid, password, receiver, filename):
+        slixmpp.ClientXMPP.__init__(self, jid, password)
+
+        self.receiver = receiver
+
+        self.file = open(filename, 'rb')
+        self.add_event_handler("session_start", self.start)
+
+    async def start(self, event):
+        try:
+            proxy = await self['xep_0065'].handshake(self.receiver)
+            while True:
+                data = self.file.read(1048576)
+                if not data:
+                    break
+                await proxy.write(data)
+
+            proxy.transport.write_eof()
+        except (IqError, IqTimeout) as e:
+            print('File transfer errored', e)
+        else:
+            print('File transfer finished')
+        finally:
+            self.file.close()
+            self.disconnect()
 
 if __name__ == '__main__':
     parser = ArgumentParser(description=Client.__doc__)
@@ -315,12 +390,11 @@ does not show that you are already logged in
 2.  Add user to cantacts                            !
 3.  Show details of a contact                       !
 4.  Comunication 1 to 1                             !
-5.  Join Group 
-6.  Group comunication
-7.  Define presence message                         !
-8.  Send/receive notifications                      ?
-9.  Send/receive files                              ?
-10. Delete account                                  ?
+5.  Group Comunication                              !
+6.  Define presence message                         !
+7.  Send/receive notifications                      !
+8.  Send/receive files                              ?
+9.  Delete account                                  !
 0.  Logout                                          !
 -----------------------------------------------------
             """)
@@ -368,20 +442,21 @@ does not show that you are already logged in
             except KeyboardInterrupt as e:
                 print('\nNice chat, dont forget I read all of it haha\n')
                 xmpp.disconnect()
-        if(user=="5"):
-            room = input("Write the room JID: ") 
-            AK = input("Write the room name: ")
-            if '@conference.alumchat.xyz':
-                xmpp = Client_join_group(args.jid, args.password, room, AK)
-                xmpp.register_plugin('xep_0030') # Service Discovery
-                xmpp.register_plugin('xep_0199') # XMPP Ping
-                xmpp.register_plugin('xep_0045') # Mulit-User Chat (MUC)
-                xmpp.register_plugin('xep_0096') # Jabber Search
-                xmpp.connect()
-                xmpp.process(forever=False)
-
-
-        if(user=="7"):
+        if(user=='5'):
+            try:
+                room = input("Write the room JID: ") 
+                AK = input("Write your room name: ")
+                if '@conference.alumchat.xyz' in room:
+                    xmpp = MUCBot(args.jid, args.password, room, AK)
+                    xmpp.register_plugin('xep_0030')
+                    xmpp.register_plugin('xep_0045')
+                    xmpp.register_plugin('xep_0199')
+                    xmpp.connect()
+                    xmpp.process(forever=False)
+            except KeyboardInterrupt as e:
+                print('\nNice chat, dont forget I read all of it haha\n')
+                xmpp.disconnect()
+        if(user=="6"):
             message = input("Write the presence message : ") 
             xmpp = Client_test(args.jid, args.password, show=False, message=message)
             xmpp.register_plugin('xep_0030') # Service Discovery
@@ -390,19 +465,31 @@ does not show that you are already logged in
             xmpp.register_plugin('xep_0096') # Jabber Search
             xmpp.connect()
             xmpp.process(forever=False)
-        if(user=="9"):
+        if(user=="7"):
+            try:
+                recipient = input("Write the recipient JID: ") 
+                message = input("Write the message: ")
+                type_ = input("Write the type: ")
+                xmpp = Client_notification(args.jid, args.password, recipient, message, type_)
+                xmpp.register_plugin('xep_0030') # Service Discovery
+                xmpp.register_plugin('xep_0199') # XMPP Ping
+                xmpp.register_plugin('xep_0045') # Mulit-User Chat (MUC)
+                xmpp.register_plugin('xep_0096') # Jabber Search
+                xmpp.connect()
+                xmpp.process(forever=False)
+            except KeyboardInterrupt as e:
+                print('\nNice notifications, dont forget I read all of it haha\n')
+                xmpp.disconnect()
+        if(user=="8"):
             recipient = input("Write the recipient JID: ") 
             file = input("Write the file path : ") 
             xmpp = Client_file(args.jid, args.password, recipient, file)
             xmpp.register_plugin('xep_0030') # Service Discovery
-            xmpp.register_plugin('xep_0199') # XMPP Ping
-            xmpp.register_plugin('xep_0045') # Mulit-User Chat (MUC)
-            xmpp.register_plugin('xep_0096') # Jabber Search
+            xmpp.register_plugin('xep_0065') # SOCKS5 Bytestreams
             xmpp.connect()
             xmpp.process(forever=False)
-        if(user=="10"):
-            xmpp = Register(args.jid, args.password)
-            xmpp.delete_account()
+        if(user=="9"):
+            xmpp = Delete(args.jid, args.password)
             xmpp = None
             control = False
             
