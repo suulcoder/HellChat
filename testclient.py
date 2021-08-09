@@ -17,6 +17,9 @@ from Client_join_group import *
 from MUCBot import *
 from Client_file import *
 
+"""
+Main file to manage xmpp client and show menu
+"""
 
 if __name__ == '__main__':
     parser = ArgumentParser(description=Client.__doc__)
