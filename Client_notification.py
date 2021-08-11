@@ -40,7 +40,7 @@ class Client_notification(slixmpp.ClientXMPP):
         #Add events handlers
         self.add_event_handler("session_start", self.start)
         self.add_event_handler("message", self.message)
-        self.message = message
+        self.msg = message
         self.user = user
         self.type_ = type_
 
@@ -50,7 +50,7 @@ class Client_notification(slixmpp.ClientXMPP):
         await self.get_roster()
 
         #Send notification
-        self.notification_(self.user, self.message, 'active')
+        self.notification_(self.user, self.msg, 'active')
 
     def notification_(self, to, body, my_type):
         """

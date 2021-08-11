@@ -27,7 +27,6 @@ class Delete(slixmpp.ClientXMPP):
         slixmpp.ClientXMPP.__init__(self, jid, password)
 
         self.user = jid
-
         #Handle events
         self.add_event_handler("session_start", self.start)
 
